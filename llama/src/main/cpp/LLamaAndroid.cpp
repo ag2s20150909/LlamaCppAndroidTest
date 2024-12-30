@@ -309,7 +309,9 @@ jlong newBatch(JNIEnv *, jobject, jint n_tokens, jint embd,
 }
 
 void freeBatch(JNIEnv *, jobject, jlong batch_pointer) {
-    llama_batch_free(*reinterpret_cast<llama_batch *>(batch_pointer));
+    const auto batch = reinterpret_cast<llama_batch *>(batch_pointer);
+    delete batch;
+    //llama_batch_free(*reinterpret_cast<llama_batch *>(batch_pointer));
 }
 
 jlong newSampler(JNIEnv *, jobject) {

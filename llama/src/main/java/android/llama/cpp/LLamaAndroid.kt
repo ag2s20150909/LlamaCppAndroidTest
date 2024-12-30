@@ -219,7 +219,7 @@ object LLamaAndroid {
                     freeModel(state.model)
                     freeBatch(state.batch)
                     freeSampler(state.sampler);
-
+                    _eventState.emit(EventState.Idle)
                     threadLocalState.set(State.Idle)
                 }
                 else -> {}

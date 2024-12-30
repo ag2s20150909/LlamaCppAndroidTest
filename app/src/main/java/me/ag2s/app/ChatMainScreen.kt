@@ -190,8 +190,7 @@ fun ChatBox(uiState: ChatUiState, viewModel: MainViewModel, modifier: Modifier =
 
                         Button(onClick = {
                             reset()
-
-                            (context as Activity).finish()
+                            viewModel.closeModel()
 
 
 

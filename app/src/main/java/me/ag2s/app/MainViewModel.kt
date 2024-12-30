@@ -234,6 +234,17 @@ class MainViewModel(private val llamaAndroid: LLamaAndroid = LLamaAndroid.instan
         //message = newMessage
     }
 
+
+    fun closeModel(){
+        viewModelScope.launch {
+            try {
+                llamaAndroid.unload()
+            } catch (exc: IllegalStateException) {
+                Log.e(TAG,exc.stackTraceToString())
+            }
+        }
+    }
+
     fun clear() {
         llamaAndroid.clearContext();
         _uiState.update {
