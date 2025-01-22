@@ -8,7 +8,8 @@ android {
     compileSdk =35
     ndkVersion= "27.2.12479018"
     defaultConfig {
-        minSdkVersion = min_sdk_version
+        minSdk = libs.versions.minSdkVersion.get().toInteger()
+        targetSdk =libs.versions.targetSdkVersion.get().toInteger()
 
         testInstrumentationRunner= "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
@@ -16,13 +17,14 @@ android {
             // Add NDK properties if wanted, e.g.
             //abiFilters "arm64-v8a","x86_64"
             //abiFilters "x86_64"
-            abiFilters "arm64-v8a"
+//            abiFilters += [ "x86", "x86_64", "armeabi-v7a", "arm64-v8a", "riscv64" ]
+            abiFilters +=["arm64-v8a"]
         }
 
         externalNativeBuild {
             cmake {
                 arguments += "-DLLAMA_BUILD_COMMON=ON"
-//                arguments += "-DGGML_LLAMAFILE=OFF"
+                arguments += "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
                 arguments += "-DCMAKE_BUILD_TYPE=Release"
                 cppFlags ''
             }
@@ -42,18 +44,42 @@ android {
     kotlinOptions {
         jvmTarget = '11'
     }
+    buildFeatures {
+        //prefab =true
+        prefabPublishing =true
+    }
     externalNativeBuild {
         cmake {
             path file('src/main/cpp/CMakeLists.txt')
             version = '3.22.1'
         }
     }
+
+    prefab {
+        "llama" {
+            headers = "src/main/cpp/llama.cpp/include"
+        }
+        "ggml-cpu" {
+            //headers "src/main/cpp/llama.cpp/ggml/src/ggml-cpu"
+        }
+
+        "ggml-base" {
+            //headers "src/main/cpp/llama.cpp/ggml/src"
+        }
+
+        "ggml" {
+            headers = "src/main/cpp/llama.cpp/ggml/include"
+        }
+
+
+    }
 }
 
 dependencies {
 
-    implementation libs.androidx.core.ktx
-
+    //implementation libs.androidx.core.ktx
+    implementation(libs.androidx.annotation)
+    implementation(libs.kotlinx.coroutines.android)
     testImplementation libs.junit
     androidTestImplementation libs.androidx.junit
     androidTestImplementation libs.androidx.espresso.core

@@ -1,265 +1,164 @@
 package android.llama.cpp
 
 import android.util.Log
+import androidx.annotation.FloatRange
 import androidx.annotation.Keep
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.Executors
-import kotlin.concurrent.thread
+import java.io.File
 
 
 @Keep
 object LLamaAndroid {
-    private val tag: String? = this::class.simpleName
 
     init {
+        val logTag = "LLamaAndroid"
+//        System.loadLibrary("GLES_mali")
+//        System.loadLibrary("dmabufheap")
         System.loadLibrary("llama-android")
+        val cpuFeatures = getCPUFeatures()
+        val hasFp16 = cpuFeatures.contains("fp16") || cpuFeatures.contains("fphp")
+        val hasDotProd = cpuFeatures.contains("dotprod") || cpuFeatures.contains("asimddp")
+        val hasSve = cpuFeatures.contains("sve")
+        val hasI8mm = cpuFeatures.contains("i8mm")
+        val isAtLeastArmV82 =
+            cpuFeatures.contains("asimd") && cpuFeatures.contains("crc32") && cpuFeatures.contains("aes")
+        val isAtLeastArmV84 = cpuFeatures.contains("dcpop") && cpuFeatures.contains("uscat")
+
+        Log.d(logTag, "CPU features: $cpuFeatures")
+        Log.d(logTag, "- hasFp16: $hasFp16")
+        Log.d(logTag, "- hasDotProd: $hasDotProd")
+        Log.d(logTag, "- hasSve: $hasSve")
+        Log.d(logTag, "- hasI8mm: $hasI8mm")
+        Log.d(logTag, "- isAtLeastArmV82: $isAtLeastArmV82")
+        Log.d(logTag, "- isAtLeastArmV84: $isAtLeastArmV84")
+    }
+
+    // Enforce only one instance of Llm.
+    private val _instance: LLamaAndroid = this
+
+    fun instance(): LLamaAndroid = _instance
+
+    fun getInfo() = systemInfo()
+
+
+    fun getCPUFeatures(): String {
+        val cpuInfo = File("/proc/cpuinfo").readText()
+        val cpuFeatures =
+            cpuInfo
+                .substringAfter("Features")
+                .substringAfter(":")
+                .substringBefore("\n")
+                .trim()
+        return cpuFeatures
+    }
+
+    private var nativePtr = 0L
+
+
+    fun setChatTemple(temple: String) {
+        assert(nativePtr != 0L) { "Model is not loaded. Use LLamaAndroid.create to load the model" }
+        setChatTemple(nativePtr, temple)
     }
 
 
-    private val threadLocalState: ThreadLocal<State> = ThreadLocal.withInitial { State.Idle }
-    val eventState: StateFlow<EventState> get() = _eventState.asStateFlow()
-    private val _eventState: MutableStateFlow<EventState> = MutableStateFlow(EventState.Idle)
+    suspend fun create(
+        modelPath: String,
+        @FloatRange(from = 0.0, to = 1.0)
+        minP: Float = 0.1f,
+        @FloatRange(from = 0.0, to = 2.0)
+        temperature: Float,
+        storeChats: Boolean,
+    ) = withContext(Dispatchers.IO) {
+        nativePtr = loadModel(modelPath, minP, temperature, storeChats)
+    }
 
+    fun addUserMessage(message: String) {
+        assert(nativePtr != 0L) { "Model is not loaded. Use LLamaAndroid.create to load the model" }
+        addChatMessage(nativePtr, message, "user")
+    }
 
-    private val runLoop: CoroutineDispatcher = Executors.newSingleThreadExecutor {
-        thread(start = false, name = "Llm-RunLoop") {
-            Log.d(tag, "Dedicated thread for native code: ${Thread.currentThread().name}")
+    fun addSystemPrompt(prompt: String) {
+        assert(nativePtr != 0L) { "Model is not loaded. Use LLamaAndroid.create to load the model" }
+        addChatMessage(nativePtr, prompt, "system")
+    }
 
-            // No-op if called more than once.
-            System.loadLibrary("llama-android")
+    fun addAssistantMessage(message: String) {
+        assert(nativePtr != 0L) { "Model is not loaded. Use LLamaAndroid.create to load the model" }
+        addChatMessage(nativePtr, message, "assistant")
+    }
 
-            // Set llama log handler to Android
-            logToAndroid()
-            backendInit(false)
+    fun getResponseGenerationSpeed(): Float {
+        assert(nativePtr != 0L) { "Model is not loaded. Use LLamaAndroid.create to load the model" }
+        return getResponseGenerationSpeed(nativePtr)
+    }
 
-            Log.d(tag, systemInfo())
-
-            it.run()
-        }.apply {
-            uncaughtExceptionHandler = Thread.UncaughtExceptionHandler { _, exception: Throwable ->
-                Log.e(tag, "Unhandled exception", exception)
+    fun getResponse(query: String): Flow<String> =
+        flow {
+            assert(nativePtr != 0L) { "Model is not loaded. Use LLamaAndroid.create to load the model" }
+            startCompletion(nativePtr, query)
+            var piece = completionLoop(nativePtr)
+            while (piece != "[EOG]") {
+                emit(piece)
+                piece = completionLoop(nativePtr)
             }
+            stopCompletion(nativePtr)
+        }.flowOn(Dispatchers.IO)
+
+    fun stopResponse() {
+        if (nativePtr != 0L) {
+            stopCompletion(nativePtr)
         }
-    }.asCoroutineDispatcher()
+    }
 
-    fun getInfo()=systemInfo()
+    fun destroyModel() {
+        if (nativePtr != 0L) {
+            closeModel(nativePtr)
+            nativePtr = 0L
+        }
 
-    private val nlen: Int = 1024
+    }
 
-    private external fun logToAndroid()
-    private external fun loadModel(filename: String): Long
-    private external fun freeModel(model: Long)
-    private external fun newContext(model: Long): Long
-    private external fun freeContext(context: Long)
-    private external fun backendInit(numa: Boolean)
-    private external fun backendFree()
-    private external fun newBatch(nTokens: Int, embd: Int, nSeqMax: Int): Long
-    private external fun freeBatch(batch: Long)
-    private external fun newSampler(): Long
-    private external fun freeSampler(sampler: Long)
-    private external fun benchModel(context: Long, model: Long, batch: Long, pp: Int, tg: Int, pl: Int, nr: Int): String
+    fun clean() {
+        if (nativePtr != 0L) {
+            cleanChatMessages(nativePtr)
+        }
+    }
+
 
     private external fun systemInfo(): String
 
-    private external fun completionInit(context: Long, batch: Long, text: String, nLen: Int): Int
 
-    private external fun applyTemple(context: Long,messages:List<Message>):String?
+    private external fun loadModel(
+        modelPath: String,
+        minP: Float,
+        temperature: Float,
+        storeChats: Boolean,
+    ): Long
 
+    private external fun setChatTemple(modelPtr: Long, temple: String)
 
-    private external fun completionLoop(context: Long, batch: Long, sampler: Long, nLen: Int, ncur: IntVar): String?
+    private external fun closeModel(modelPtr: Long)
 
-    private external fun kvCacheClear(context: Long)
+    private external fun addChatMessage(
+        modelPtr: Long,
+        message: String,
+        role: String,
+    )
 
-
-
-    suspend fun bench(pp: Int, tg: Int, pl: Int, nr: Int = 1): String {
-        return withContext(runLoop) {
-            when (val state = threadLocalState.get()) {
-                is State.Loaded -> {
-                    Log.d(tag, "bench(): $state")
-                    benchModel(state.context, state.model, state.batch, pp, tg, pl, nr)
-                }
-
-                else -> throw IllegalStateException("No model loaded")
-            }
-        }
-    }
-
-    suspend fun load(pathToModel: String) {
-        withContext(runLoop) {
-            when (threadLocalState.get()) {
-                is State.Idle -> {
-                    _eventState.emit(EventState.Idle)
-                    val model = loadModel(pathToModel)
-                    if (model == 0L)  throw IllegalStateException("load_model() failed")
-
-                    val context = newContext(model)
-                    if (context == 0L) throw IllegalStateException("new_context() failed")
-
-                    val batch = newBatch(512, 0, 1)
-                    if (batch == 0L) throw IllegalStateException("new_batch() failed")
-
-                    val sampler = newSampler()
-                    if (sampler == 0L) throw IllegalStateException("new_sampler() failed")
-
-                    Log.i(tag, "Loaded model $pathToModel")
-                    threadLocalState.set(State.Loaded(model, context, batch, sampler))
-                    _eventState.emit(EventState.Loaded)
-                }
-                else -> throw IllegalStateException("Model already loaded")
-            }
-        }
-    }
-
-    fun clearContext(){
-        CoroutineScope(runLoop).launch {
-            when (val state = threadLocalState.get()) {
-                is State.Loaded -> {
-                    kvCacheClear(state.context)
-                }
-
-                else -> {}
-            }
-        }
-
-    }
+    private external fun getResponseGenerationSpeed(modelPtr: Long): Float
 
 
+    private external fun startCompletion(
+        modelPtr: Long,
+        prompt: String,
+    )
 
-    fun chat(messages: List<Message>): Flow<String> = flow {
+    private external fun completionLoop(modelPtr: Long): String
 
-            when(val state = threadLocalState.get()){
-                is State.Loaded -> {
-                    _eventState.emit(EventState.Busy)
-                    applyTemple(state.context,messages)?.let { format->
-
-                        val ncur = IntVar(completionInit(state.context,state.batch,format,nlen))
-                        while (ncur.value <= nlen) {
-                            val str = completionLoop(state.context, state.batch, state.sampler, nlen, ncur)
-                            if (str==null){
-                                _eventState.emit(EventState.Loaded)
-                                break
-                            }
-                            _eventState.emit(EventState.Busy)
-                            emit(str)
-                        }
-
-                        _eventState.emit(EventState.Loaded)
-                        emit("")
-                        kvCacheClear(state.context)
-
-
-                    }
-                    _eventState.emit(EventState.Loaded)
-
-
-
-
-
-                }
-                else -> {
-
-                }
-            }
-
-
-
-
-
-
-    }.flowOn(runLoop)
-
-//    fun send(message: ChatTemple): Flow<String> = flow {
-//        when (val state = threadLocalState.get()) {
-//            is State.Loaded -> {
-//                _eventState.emit(EventState.Busy)
-//                message.cleanCurrent()
-//                val ncur = IntVar(completionInit(state.context, state.batch, message.buildChat(), nlen))
-//                while (ncur.value <= nlen) {
-//                    val str = completionLoop(state.context, state.batch, state.sampler, nlen, ncur)
-//                    if (str==null){
-//                        _eventState.emit(EventState.Loaded)
-//                        break
-//                    }
-//                    if (message.isStop(str)){
-//                        _eventState.emit(EventState.Loaded)
-//                        break
-//                    }
-//                    _eventState.emit(EventState.Busy)
-//                    emit(str)
-//                }
-//                _eventState.emit(EventState.Loaded)
-//                emit("")
-//                kvCacheClear(state.context)
-//            }
-//            else -> {}
-//        }
-//    }.flowOn(runLoop)
-
-    /**
-     * Unloads the model and frees resources.
-     *
-     * This is a no-op if there's no model loaded.
-     */
-    suspend fun unload() {
-        withContext(runLoop) {
-            when (val state = threadLocalState.get()) {
-                is State.Loaded -> {
-                    freeContext(state.context)
-                    freeModel(state.model)
-                    freeBatch(state.batch)
-                    freeSampler(state.sampler);
-                    _eventState.emit(EventState.Idle)
-                    threadLocalState.set(State.Idle)
-                }
-                else -> {}
-            }
-        }
-    }
-
-//    companion object {
-
-
-        @Keep
-        private class IntVar(value: Int) {
-            @Volatile
-            var value: Int = value
-                private set
-
-            fun inc() {
-                synchronized(this) {
-                    value += 1
-                }
-            }
-        }
-
-
-
-        private sealed interface State {
-            data object Idle: State
-            data class Loaded(val model: Long, val context: Long, val batch: Long, val sampler: Long): State
-        }
-
-        sealed interface EventState{
-            data object Idle:EventState
-            data object Loaded:EventState
-            data object Busy:EventState
-        }
-
-
-//        // Enforce only one instance of Llm.
-//        private val _instance: LLamaAndroid = LLamaAndroid()
-
-        fun instance(): LLamaAndroid = this
-    //}
+    private external fun stopCompletion(modelPtr: Long)
+    private external fun cleanChatMessages(modelPtr: Long)
 }
