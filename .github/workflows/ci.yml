@@ -1,0 +1,46 @@
+name: Build Test
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout LLamaCPP
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: ggerganov/llama.cpp
+          ref: master
+          path: llama/src/main/cpp/llama.cpp
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      
+
+      - name: Build With Gradle
+        run: |
+          chmod +x gradlew
+          ./gradlew assemblerelease --build-cache --parallel  --warning-mode all
+      
+      - name: Upload App To Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/app/build/outputs/apk/release/*

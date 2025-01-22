@@ -11,6 +11,26 @@ android {
     namespace = 'me.ag2s.app'
     compileSdk = 35
 
+    //签名设置
+    signingConfigs {
+        release {
+            keyAlias ='key'
+            keyPassword ='1234567890'
+            storeFile =file("../.github/public.jks")
+            storePassword ='1234567890'
+            v1SigningEnabled =true
+            v2SigningEnabled =true
+            enableV3Signing = true
+            enableV4Signing = true
+        }
+        debug {
+            keyAlias ='key'
+            keyPassword ='1234567890'
+            storeFile =file("../.github/public.jks")
+            storePassword ='1234567890'
+        }
+    }
+
     defaultConfig {
         applicationId ="me.ag2s.llmtest"
         minSdk = libs.versions.minSdkVersion.get().toInteger()
@@ -21,13 +41,17 @@ android {
 
         testInstrumentationRunner ="androidx.test.runner.AndroidJUnitRunner"
 
+        ndk {
+            abiFilters +=["arm64-v8a"]
+        }
+
     }
 
     buildTypes {
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig = signingConfigs.debug
+            signingConfig = signingConfigs.release
         }
     }
     compileOptions {
