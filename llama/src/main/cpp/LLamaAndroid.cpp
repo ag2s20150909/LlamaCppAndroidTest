@@ -19,13 +19,13 @@
 #include "llm_inference.h"
 
 
-jstring systemInfo(JNIEnv *env, jobject thiz) {
+jstring systemInfo(JNIEnv *env, [[maybe_unused]] jobject thiz) {
     return env->NewStringUTF(llama_print_system_info());
 }
 
 jlong loadModel(
         JNIEnv *env,
-        jobject thiz,
+        [[maybe_unused]] jobject thiz,
         jstring model_path,
         jfloat min_p,
         jfloat temperature,
@@ -47,7 +47,7 @@ jlong loadModel(
 }
 
 
-void addChatMessage(JNIEnv *env, jobject thiz, jlong model_ptr, jstring message,
+void addChatMessage(JNIEnv *env, [[maybe_unused]] jobject thiz, jlong model_ptr, jstring message,
                     jstring role) {
     jboolean isCopy = true;
     const char *message_cstr = env->GetStringUTFChars(message, &isCopy);
@@ -58,19 +58,19 @@ void addChatMessage(JNIEnv *env, jobject thiz, jlong model_ptr, jstring message,
     env->ReleaseStringUTFChars(role, role_cstr);
 }
 
-jfloat getResponseGenerationSpeed(JNIEnv *env, jobject thiz,
+jfloat getResponseGenerationSpeed([[maybe_unused]] JNIEnv *env, [[maybe_unused]] jobject thiz,
                                   jlong model_ptr) {
     auto *llmInference = reinterpret_cast<LLMInference *>(model_ptr);
     return llmInference->get_response_generation_time();
 }
 
-void closeModel(JNIEnv *env, jobject thiz, jlong model_ptr) {
+void closeModel([[maybe_unused]] JNIEnv *env, [[maybe_unused]] jobject thiz, jlong model_ptr) {
     auto *llmInference = reinterpret_cast<LLMInference *>(model_ptr);
     delete llmInference;
 }
 
 
-void startCompletion(JNIEnv *env, jobject thiz, jlong model_ptr, jstring prompt) {
+void startCompletion(JNIEnv *env, [[maybe_unused]] jobject thiz, jlong model_ptr, jstring prompt) {
     jboolean isCopy = true;
     const char *prompt_cstr = env->GetStringUTFChars(prompt, &isCopy);
     auto *llmInference = reinterpret_cast<LLMInference *>(model_ptr);
@@ -79,7 +79,7 @@ void startCompletion(JNIEnv *env, jobject thiz, jlong model_ptr, jstring prompt)
 }
 
 
-jstring completionLoop(JNIEnv *env, jobject thiz, jlong model_ptr) {
+jstring completionLoop(JNIEnv *env, [[maybe_unused]] jobject thiz, jlong model_ptr) {
     auto *llmInference = reinterpret_cast<LLMInference *>(model_ptr);
     try {
         std::string response = llmInference->completion_loop();
@@ -92,17 +92,17 @@ jstring completionLoop(JNIEnv *env, jobject thiz, jlong model_ptr) {
 }
 
 
-void stopCompletion(JNIEnv *env, jobject thiz, jlong model_ptr) {
+void stopCompletion([[maybe_unused]] JNIEnv *env, [[maybe_unused]] jobject thiz, jlong model_ptr) {
     auto *llmInference = reinterpret_cast<LLMInference *>(model_ptr);
     llmInference->stop_completion();
 }
 
-void cleanChatMessages(JNIEnv *env, jobject thiz, jlong model_ptr) {
+void cleanChatMessages([[maybe_unused]] JNIEnv *env, [[maybe_unused]] jobject thiz, jlong model_ptr) {
     auto *llmInference = reinterpret_cast<LLMInference *>(model_ptr);
     llmInference->clean_message();
 }
 
-void setChatTemple(JNIEnv *env, jobject thiz, jlong model_ptr,
+void setChatTemple(JNIEnv *env, [[maybe_unused]] jobject thiz, jlong model_ptr,
                    jstring temple) {
     auto *llmInference = reinterpret_cast<LLMInference *>(model_ptr);
     jboolean isCopy = false;
@@ -112,8 +112,20 @@ void setChatTemple(JNIEnv *env, jobject thiz, jlong model_ptr,
 
 }
 
+jstring benchModel(JNIEnv *env, [[maybe_unused]] jobject thiz,jlong model_ptr, jint pp, jint tg, jint pl, jint nr) {
+    auto *llmInference = reinterpret_cast<LLMInference *>(model_ptr);
+    try {
+        std::string result = llmInference->bench(pp, tg, pl, nr);
+        return env->NewStringUTF(result.c_str());
+    }
+    catch (std::runtime_error &error) {
+        env->ThrowNew(env->FindClass("java/lang/IllegalStateException"), error.what());
+        return nullptr;
+    }
+}
 
-JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
+
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, [[maybe_unused]] void *reserved) {
     JNIEnv *env = nullptr;
     jint ret = vm->GetEnv((void **) &env, JNI_VERSION_1_6);
     if (ret != JNI_OK) {
@@ -121,6 +133,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
         return -1;
     }
     llama_log_set(log_callback, nullptr);
+    llama_backend_init();
 
     JNINativeMethod g_Methods[] = {
             {"loadModel",                  "(Ljava/lang/String;FFZ)J",                 (void *) loadModel},
@@ -132,7 +145,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
             {"stopCompletion",             "(J)V",                                     (void *) stopCompletion},
             {"cleanChatMessages",          "(J)V",                                     (void *) cleanChatMessages},
             {"completionLoop",             "(J)Ljava/lang/String;",                    (void *) completionLoop},
-            {"getResponseGenerationSpeed", "(J)F",                                     (void *) getResponseGenerationSpeed}
+            {"getResponseGenerationSpeed", "(J)F",                                     (void *) getResponseGenerationSpeed},
+            {"benchModel",                 "(JIIII)Ljava/lang/String;",                 (void *) benchModel},
 
 
     };
@@ -153,7 +167,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     return JNI_VERSION_1_6;
 }
 
-JNIEXPORT void JNICALL JNI_OnUnload(JavaVM *vm, void *reserved) {
+JNIEXPORT void JNICALL JNI_OnUnload([[maybe_unused]] JavaVM *vm, [[maybe_unused]] void *reserved) {
     llama_backend_free();
 }
 

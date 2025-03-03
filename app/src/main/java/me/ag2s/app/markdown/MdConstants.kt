@@ -11,10 +11,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.sp
+import org.intellij.markdown.flavours.MarkdownFlavourDescriptor
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.parser.MarkdownParser
 
-object MarkStyles {
+
+object MdConstants {
+
     val h1Style = SpanStyle(fontSize = 22.sp)
 
     val h2Style = SpanStyle(fontSize = 20.sp)
@@ -37,18 +40,15 @@ object MarkStyles {
     // create a variable subScript
     // enter the baselineShift to
     // BaselineShift.Subscript for subscript
-    val subscript = SpanStyle(
-        baselineShift = BaselineShift.Subscript,
-        fontSize = 16.sp, // font size of subscript
-        color = Color.Blue // color
+    val subscript = SpanStyle(baselineShift = BaselineShift.Subscript, fontSize = 16.sp, // font size of subscript color = Color.Blue // color
     )
+
 
     val strongStyle: SpanStyle = SpanStyle(fontWeight = FontWeight.Bold)
     val ItalicStyle: SpanStyle = SpanStyle(fontStyle = FontStyle.Italic)
     val UnderlineStyle: SpanStyle = SpanStyle(textDecoration = TextDecoration.Underline)
     val LineThroughStyle: SpanStyle = SpanStyle(textDecoration = TextDecoration.LineThrough)
     val UAndTStyler: SpanStyle = SpanStyle(textDecoration = TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough)))
-
     val BlankRegex: Regex = Regex("\\s+")
 
 
@@ -56,7 +56,11 @@ object MarkStyles {
 
 
 
-    private val flavour by lazy { GFMFlavourDescriptor(useSafeLinks = true, absolutizeAnchorLinks = true,makeHttpsAutoLinks = true)}
 
-    val parser by lazy { MarkdownParser(flavour,true) }
+
+    private val flavour: MarkdownFlavourDescriptor by lazy { GFMFlavourDescriptor() }
+    val parser by lazy {
+        MarkdownParser(flavour)
+
+    }
 }

@@ -128,6 +128,13 @@ object LLamaAndroid {
         }
     }
 
+    suspend fun bench(pp: Int, tg: Int, pl: Int, nr: Int = 1): String {
+        return withContext(Dispatchers.IO) {
+            assert(nativePtr != 0L) { "Model is not loaded. Use LLamaAndroid.create to load the model" }
+            benchModel(nativePtr, pp, tg, pl, nr)
+        }
+    }
+
 
     private external fun systemInfo(): String
 
@@ -138,6 +145,8 @@ object LLamaAndroid {
         temperature: Float,
         storeChats: Boolean,
     ): Long
+
+
 
     private external fun setChatTemple(modelPtr: Long, temple: String)
 
@@ -158,6 +167,8 @@ object LLamaAndroid {
     )
 
     private external fun completionLoop(modelPtr: Long): String
+
+    private external fun benchModel(modelPtr: Long,pp: Int, tg: Int, pl: Int, nr: Int): String
 
     private external fun stopCompletion(modelPtr: Long)
     private external fun cleanChatMessages(modelPtr: Long)

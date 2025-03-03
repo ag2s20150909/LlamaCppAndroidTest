@@ -1,13 +1,19 @@
 package me.ag2s.app
 
 
+import android.annotation.SuppressLint
+import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.llama.cpp.EventState
 import android.llama.cpp.LLamaMessage
 import android.llama.cpp.isUser
 import android.os.Build
 import android.os.Environment
 import android.provider.DocumentsContract
+import android.provider.MediaStore
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -31,6 +37,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -48,10 +55,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
@@ -59,14 +73,20 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import me.ag2s.app.markdown.ComposeVisitor
+import me.ag2s.app.markdown.MdConstants.parser
 import me.ag2s.app.markdown.MarkdownText
+import org.intellij.markdown.ast.accept
+import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStream
 
 
 @Composable
 fun ChatMainScreen(model: MainViewModel, modifier: Modifier) {
     val uiState: ChatUiState by model.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
+
     val listState = rememberLazyListState()
     LaunchedEffect(Unit) {
         val modelFile = context.getExternalFilesDir("model")!!.resolve("test.gguf")
@@ -76,7 +96,7 @@ fun ChatMainScreen(model: MainViewModel, modifier: Modifier) {
 
     }
 
-    if(uiState.state==EventState.Busy){
+    if (uiState.state == EventState.Busy) {
         KeepScreenOn()
     }
 
@@ -87,7 +107,7 @@ fun ChatMainScreen(model: MainViewModel, modifier: Modifier) {
 
     val showSpeed by remember {
         derivedStateOf {
-           uiState.speed>0&&uiState.state==EventState.Loaded&&uiState.messages.isNotEmpty()
+            uiState.speed > 0 && uiState.state == EventState.Loaded && uiState.messages.isNotEmpty()
         }
     }
 
@@ -97,27 +117,28 @@ fun ChatMainScreen(model: MainViewModel, modifier: Modifier) {
 
     ConstraintLayout(modifier = modifier) {
         val (messages, chatBox) = createRefs()
-        LazyColumn(modifier = Modifier
-            .fillMaxWidth()
-            .constrainAs(messages) {
-                top.linkTo(parent.top)
-                bottom.linkTo(chatBox.top)
-                start.linkTo(parent.start)
-                end.linkTo(parent.end)
-                height = Dimension.fillToConstraints
-            },
-            state = listState) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .constrainAs(messages) {
+                    top.linkTo(parent.top)
+                    bottom.linkTo(chatBox.top)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                    height = Dimension.fillToConstraints
+                },
+            state = listState
+        ) {
 
 
             items(uiState.messages) {
                 ChatItem(it)
             }
-            if (showSpeed){
+            if (showSpeed) {
                 item {
-                    Text("${uiState.speed} token/s",modifier=Modifier.padding(8.dp))
+                    Text("${uiState.speed} token/s", modifier = Modifier.padding(8.dp))
                 }
             }
-
 
 
         }
@@ -141,7 +162,11 @@ fun ChatMainScreen(model: MainViewModel, modifier: Modifier) {
         Dialog(onDismissRequest = {
             model.closeDialog(prompt, false, context)
         }) {
-            Column(modifier = Modifier.background(MaterialTheme.colorScheme.secondaryContainer).padding(16.dp)) {
+            Column(
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .padding(16.dp)
+            ) {
                 TextField(
                     value = prompt,
                     onValueChange = { prompt = it },
@@ -179,17 +204,30 @@ fun ChatMainScreen(model: MainViewModel, modifier: Modifier) {
 
 @Composable
 private fun ChatItem(message: LLamaMessage) {
+    val clipboardManager = LocalClipboardManager.current
+    val focusManger = LocalFocusManager.current
+    val coroutineScope = rememberCoroutineScope()
+    val graphicsLayer = rememberGraphicsLayer()
+    val context = LocalContext.current
+
+    var format by remember { mutableStateOf(!message.isUser()) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(4.dp)
     ) {
-        Row(Modifier.align(if (message.isUser()) Alignment.End else Alignment.Start)) {
-            Text(message.role.name)
-
-        }
+        Text(message.role.name)
         Box(
             modifier = Modifier
+                .drawWithContent {
+                    // call record to capture the content in the graphics layer
+                    graphicsLayer.record {
+                        // draw the contents of the composable into the graphics layer
+                        this@drawWithContent.drawContent()
+                    }
+                    // draw the graphics layer on the visible canvas
+                    drawLayer(graphicsLayer)
+                }
                 .align(if (message.isUser()) Alignment.End else Alignment.Start)
                 .clip(
                     RoundedCornerShape(
@@ -202,14 +240,114 @@ private fun ChatItem(message: LLamaMessage) {
                 .background(MaterialTheme.colorScheme.secondaryContainer)
                 .padding(16.dp)
         ) {
+
+
             SelectionContainer {
-                MarkdownText(message.content)
+
+                MarkdownText(message.content, format)
                 //Text(message.content)
             }
+
+
+        }
+        Row() {
+
+            ClickText("Copy") {
+                focusManger.clearFocus()
+                val text = if (format) {
+                    val root = parser.buildMarkdownTreeFromString(message.content)
+                    val result = AnnotatedString.Builder()
+                    root.accept(ComposeVisitor(result, message.content))
+                    result.toAnnotatedString()
+                } else {
+                    AnnotatedString(message.content)
+                }
+                clipboardManager.setText(text)
+            }
+            ClickText("Format") {
+                format = !format
+                focusManger.clearFocus()
+            }
+
+            ClickText("Save") {
+                focusManger.clearFocus()
+                coroutineScope.launch {
+                    val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
+                    bitmap.saveToCache(context)
+                }
+            }
+
 
         }
     }
 
+}
+
+@Composable
+private fun ClickText(text: String, fontSize: TextUnit = 12.sp, onClick: () -> Unit) {
+    Text(
+        text, modifier = Modifier
+            .clickable {
+                onClick()
+            }
+            .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
+            .padding(horizontal = 8.dp), fontSize = fontSize
+    )
+}
+
+fun Bitmap.compress(stream: OutputStream) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        this.compress(Bitmap.CompressFormat.WEBP_LOSSY, 20, stream)
+    } else {
+        this.compress(Bitmap.CompressFormat.WEBP, 20, stream)
+    }
+}
+
+@SuppressLint("SdCardPath")
+fun Bitmap.saveToCache(context: Context) {
+    val timestamp = System.currentTimeMillis()
+    //Tell the media scanner about the new file so that it is immediately available to the user.
+    val values = ContentValues()
+    values.put(MediaStore.Images.Media.MIME_TYPE, "image/webp")
+    values.put(MediaStore.Images.Media.DATE_ADDED, timestamp)
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        values.put(MediaStore.Images.Media.DATE_TAKEN, timestamp)
+        values.put(
+            MediaStore.Images.Media.RELATIVE_PATH,
+            "Pictures/" + context.getString(R.string.app_name)
+        )
+        values.put(MediaStore.Images.Media.IS_PENDING, true)
+        val uri =
+            context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+        if (uri != null) {
+            try {
+                context.contentResolver.openOutputStream(uri)?.use {
+                    this.compress(it)
+                }
+                values.put(MediaStore.Images.Media.IS_PENDING, false)
+                context.contentResolver.update(uri, values, null, null)
+
+                Toast.makeText(context, "Saved...", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                //Log.e(TAG, "saveBitmapImage: ", e)
+            }
+        }
+    } else {
+        val imageFile = File("/sdcard/${Environment.DIRECTORY_PICTURES}/${timestamp}.webp")
+        try {
+            FileOutputStream(imageFile).use {
+                this.compress(it)
+            }
+
+            values.put(MediaStore.Images.Media.DATA, imageFile.absolutePath)
+            context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+
+            Toast.makeText(context, "Saved...", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            //Log.e(TAG, "saveBitmapImage: ", e)
+        }
+    }
 }
 
 
@@ -232,7 +370,7 @@ fun ChatBox(uiState: ChatUiState, viewModel: MainViewModel, modifier: Modifier =
     }
 
 
-    fun makeIntent():Intent{
+    fun makeIntent(): Intent {
         val intent =
             Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 setType("application/octet-stream")
@@ -308,6 +446,16 @@ fun ChatBox(uiState: ChatUiState, viewModel: MainViewModel, modifier: Modifier =
 
                         }) {
                             Text("关闭")
+                        }
+
+
+                        Button(onClick = {
+                            reset()
+                            viewModel.bench()
+
+
+                        }) {
+                            Text("Bench")
                         }
 
 

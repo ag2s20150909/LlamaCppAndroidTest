@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include <android/log.h>
+#include <sys/sysconf.h>
 #define TAG "llama-android.cpp"
 #define LOGi(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGe(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
@@ -27,7 +28,7 @@ class LLMInference {
     llama_context *ctx;
     llama_model *model;
     const llama_vocab *vocab;
-    const char * tmpl;
+    std::string tmpl;
     llama_sampler *sampler;
     llama_batch batch;
     std::string response;
@@ -58,6 +59,8 @@ public:
     void start_completion(const char *query);
 
     std::string completion_loop();
+
+    std::string bench(int pp,int tg,int pl,int nr);
 
     void stop_completion();
 

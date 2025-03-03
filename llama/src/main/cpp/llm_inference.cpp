@@ -13,6 +13,8 @@ LLMInference::load_model(const char *model_path, float min_p, float temperature,
     //llama_log_set(log_callback, nullptr);
 
     llama_model_params model_params = llama_model_default_params();
+    model_params.n_gpu_layers=999;
+    model_params.use_mmap= true;
     model = llama_model_load_from_file(model_path, model_params);
 
     if (!model) {
@@ -23,7 +25,7 @@ LLMInference::load_model(const char *model_path, float min_p, float temperature,
     vocab = llama_model_get_vocab(model);
     tmpl = llama_model_chat_template(model, nullptr);
 
-    LOGe("chat template is %s",tmpl);
+    LOGe("chat template is %s",tmpl.c_str());
 
     int n_threads = std::max(1, std::min(8, (int) sysconf(_SC_NPROCESSORS_ONLN) - 2));
     // create an instance of llama_context
@@ -49,6 +51,7 @@ LLMInference::load_model(const char *model_path, float min_p, float temperature,
     llama_sampler_chain_params sampler_params = llama_sampler_chain_default_params();
     sampler_params.no_perf = true;      // disable performance metrics
     sampler = llama_sampler_chain_init(sampler_params);
+    llama_sampler_chain_add(sampler,llama_sampler_init_greedy());
     llama_sampler_chain_add(sampler, llama_sampler_init_min_p(min_p, 1));
     llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature));
     llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
@@ -87,7 +90,7 @@ void LLMInference::start_completion(const char *query) {
 
 
     int new_len = llama_chat_apply_template(
-            tmpl,
+            tmpl.c_str(),
             messages.data(),
             messages.size(),
             true,
@@ -96,7 +99,7 @@ void LLMInference::start_completion(const char *query) {
     );
     if (new_len > (int) formatted.size()) {
         formatted.resize(new_len);
-        new_len = llama_chat_apply_template(tmpl, messages.data(), messages.size(), true,
+        new_len = llama_chat_apply_template(tmpl.c_str(), messages.data(), messages.size(), true,
                                             formatted.data(), (int32_t) formatted.size());
     }
     if (new_len < 0) {
@@ -105,6 +108,7 @@ void LLMInference::start_completion(const char *query) {
     }
     LOGe("messages.size() %zu %d",messages.size(),prev_len);
     std::string prompt(formatted.begin() + prev_len, formatted.begin() + new_len);
+    LOGe("messages.size() %s",prompt.c_str());
     std::vector<llama_token> prompt_tokens = common_tokenize(vocab, prompt,llama_get_kv_cache_used_cells(ctx)==0, true);
 
     // create a llama_batch containing a single sequence
@@ -157,7 +161,7 @@ std::string LLMInference::completion_loop() {
     }
 
     uint32_t context_size = llama_n_ctx(ctx);
-    int n_ctx_used = llama_get_kv_cache_used_cells(ctx);
+    uint32_t n_ctx_used = llama_get_kv_cache_used_cells(ctx);
     if (n_ctx_used + batch.n_tokens > context_size) {
         std::cerr << "context size exceeded" << '\n';
         exit(0);
@@ -198,6 +202,107 @@ std::string LLMInference::completion_loop() {
     return "";
 }
 
+std::string LLMInference::bench(int pp,int tg,int pl,int nr){
+    auto pp_avg = 0.0;
+    auto tg_avg = 0.0;
+    auto pp_std = 0.0;
+    auto tg_std = 0.0;
+    batch = llama_batch_init(512, 0,1);
+
+    const int n_ctx = llama_n_ctx(ctx);
+    LOGi("n_ctx = %d", n_ctx);
+    int i, j;
+    int nri;
+    for (nri = 0; nri < nr; nri++) {
+        LOGi("Benchmark prompt processing (pp)");
+
+        common_batch_clear(batch);
+
+        const int n_tokens = pp;
+        for (i = 0; i < n_tokens; i++) {
+            common_batch_add(batch, 0, i, { 0 }, false);
+        }
+
+        batch.logits[batch.n_tokens - 1] = true;
+        llama_kv_cache_clear(ctx);
+
+        const auto t_pp_start = ggml_time_us();
+        if (llama_decode(ctx, batch) != 0) {
+            LOGi("llama_decode() failed during prompt processing");
+        }
+        const auto t_pp_end = ggml_time_us();
+
+        // bench text generation
+
+        LOGi("Benchmark text generation (tg)");
+
+        llama_kv_cache_clear(ctx);
+        const auto t_tg_start = ggml_time_us();
+        for (i = 0; i < tg; i++) {
+
+            common_batch_clear(batch);
+            for (j = 0; j < pl; j++) {
+                common_batch_add(batch, 0, i, { j }, true);
+            }
+
+            LOGi("llama_decode() text generation: %d", i);
+            if (llama_decode(ctx, batch) != 0) {
+                LOGi("llama_decode() failed during text generation");
+            }
+        }
+
+        const auto t_tg_end = ggml_time_us();
+
+        llama_kv_cache_clear(ctx);
+
+        const auto t_pp = double(t_pp_end - t_pp_start) / 1000000.0;
+        const auto t_tg = double(t_tg_end - t_tg_start) / 1000000.0;
+
+        const auto speed_pp = double(pp) / t_pp;
+        const auto speed_tg = double(pl * tg) / t_tg;
+
+        pp_avg += speed_pp;
+        tg_avg += speed_tg;
+
+        pp_std += speed_pp * speed_pp;
+        tg_std += speed_tg * speed_tg;
+
+        LOGi("pp %f t/s, tg %f t/s", speed_pp, speed_tg);
+    }
+
+    pp_avg /= double(nr);
+    tg_avg /= double(nr);
+
+    if (nr > 1) {
+        pp_std = sqrt(pp_std / double(nr - 1) - pp_avg * pp_avg * double(nr) / double(nr - 1));
+        tg_std = sqrt(tg_std / double(nr - 1) - tg_avg * tg_avg * double(nr) / double(nr - 1));
+    } else {
+        pp_std = 0;
+        tg_std = 0;
+    }
+
+    char model_desc[128];
+    llama_model_desc(model, model_desc, sizeof(model_desc));
+
+    const auto model_size     = double(llama_model_size(model)) / 1024.0 / 1024.0 / 1024.0;
+    const auto model_n_params = double(llama_model_n_params(model)) / 1e9;
+
+    const auto backend    = "(Android)"; // TODO: What should this be?
+
+    std::stringstream result;
+    //result << std::setprecision(2);
+    result << "| model | size | params | backend | test | t/s |\n";
+    result << "| --- | --- | --- | --- | --- | --- |\n";
+    result << "| " << model_desc << " | " << model_size << "GiB | " << model_n_params << "B | " << backend << " | pp " << pp << " | " << pp_avg << " ± " << pp_std << " |\n";
+    result << "| " << model_desc << " | " << model_size << "GiB | " << model_n_params << "B | " << backend << " | tg " << tg << " | " << tg_avg << " ± " << tg_std << " |\n";
+
+    return result.str();
+
+
+
+
+}
+
 
 void LLMInference::stop_completion() {
     if (store_chats) {
@@ -207,7 +312,7 @@ void LLMInference::stop_completion() {
 
 
     prev_len = llama_chat_apply_template(
-            tmpl,
+            tmpl.c_str(),
             messages.data(),
             messages.size(),
             false,

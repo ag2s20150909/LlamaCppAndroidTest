@@ -76,6 +76,8 @@ android {
 
 dependencies {
 
+    implementation(fileTree(dir: 'libs', include: ['*.jar', '*.aar']))
+
     implementation libs.androidx.lifecycle.runtime.ktx
     implementation libs.androidx.activity.compose
     implementation platform(libs.androidx.compose.bom)
@@ -90,12 +92,12 @@ dependencies {
     implementation libs.androidx.constraintlayout.compose
 
 
-    //noinspection UseTomlInstead
-    implementation("org.jetbrains:markdown:0.7.3")
+    implementation(libs.markdown)
     implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
 
-    //implementation(libs.kotlinx.serialization.json)
-
+//    implementation(libs.kotlinx.serialization.json)
+//    implementation(libs.kotlinx.datetime)
 
 
     testImplementation libs.junit

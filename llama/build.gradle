@@ -6,7 +6,7 @@ plugins {
 android {
     namespace = 'android.llama.cpp'
     compileSdk =35
-    ndkVersion= "27.2.12479018"
+    ndkVersion= "28.0.13004108"
     defaultConfig {
         minSdk = libs.versions.minSdkVersion.get().toInteger()
         targetSdk =libs.versions.targetSdkVersion.get().toInteger()
@@ -30,6 +30,12 @@ android {
             }
         }
     }
+    packagingOptions {
+        jniLibs {
+            excludes += ['lib/arm64-v8a/libOpenCL.so']
+        }
+    }
+
 
     buildTypes {
         release {
@@ -51,9 +57,11 @@ android {
     externalNativeBuild {
         cmake {
             path file('src/main/cpp/CMakeLists.txt')
-            version = '3.22.1'
+            version = '3.31.5'
         }
     }
+
+
 
     prefab {
         "llama" {
