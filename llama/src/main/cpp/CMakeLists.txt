@@ -3,9 +3,11 @@
 cmake_minimum_required(VERSION 3.24.0)
 project("llama-android")
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv8.2-a+fp16+dotprod -flto")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -march=armv8.2-a+fp16+dotprod  -flto")
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -O3 -flto")
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv8.2-a+fp16+dotprod -flto")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -march=armv8.2-a+fp16+dotprod  -flto")
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -flto")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}    -flto")
+#set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -O3 -flto")
 
 
 set(GGML_VULKAN OFF)
@@ -30,7 +32,8 @@ endif ()
 
 if (${ANDROID_ABI} STREQUAL "arm64-v8a")
     set(GGML_CPU_AARCH64 ON)
-    set(GGML_CPU_ARM_ARCH "armv8.2-a+fp16+dotprod")
+    #https://gcc.gnu.org/onlinedocs/gcc-14.2.0/gcc/AArch64-Options.html
+    set(GGML_CPU_ARM_ARCH "armv8.2-a")
     set(GGML_USE_CPU_AARCH64 ON)
 endif ()
 
@@ -50,8 +53,6 @@ if (GGML_VULKAN)
     elseif (CMAKE_HOST_SYSTEM MATCHES Linux)
         set(Vulkan_GLSLC_EXECUTABLE,"${CMAKE_ANDROID_NDK}/shader-tools/linux-x86_64/glslc")
     endif ()
-
-
     include_directories(
             ${CMAKE_SOURCE_DIR}/vulkan
             ${CMAKE_CURRENT_BINARY_DIR}/build-llama/ggml/src/ggml-vulkan

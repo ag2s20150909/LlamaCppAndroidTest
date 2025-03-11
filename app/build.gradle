@@ -10,7 +10,7 @@ plugins {
 android {
     namespace = 'me.ag2s.app'
     compileSdk = 35
-
+    ndkVersion= "28.0.13004108"
     //签名设置
     signingConfigs {
         release {

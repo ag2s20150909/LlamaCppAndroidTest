@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
@@ -230,7 +229,7 @@ class MainViewModel(private val llamaAndroid: LLamaAndroid = LLamaAndroid.instan
 
 
                 if (uiState.value.messages.size <= 2) {
-                    if (systemMessage.content != DEFAULT_SYSTEM) {
+                    if (systemMessage.content != DEFAULT_SYSTEM&&systemMessage.content.isNotBlank()) {
                         llamaAndroid.addSystemPrompt(systemMessage.content)
                     }
 
