@@ -43,4 +43,4 @@ jobs:
       - name: Upload App To Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}/app/build/outputs/apk/release/*
+          path: ${{ github.workspace }}/app/build/outputs/apk/*/release/*

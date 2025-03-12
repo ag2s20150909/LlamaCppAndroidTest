@@ -28,13 +28,13 @@ object LLamaAndroid {
             cpuFeatures.contains("asimd") && cpuFeatures.contains("crc32") && cpuFeatures.contains("aes")
         val isAtLeastArmV84 = cpuFeatures.contains("dcpop") && cpuFeatures.contains("uscat")
 
-        Log.d(logTag, "CPU features: $cpuFeatures")
-        Log.d(logTag, "- hasFp16: $hasFp16")
-        Log.d(logTag, "- hasDotProd: $hasDotProd")
-        Log.d(logTag, "- hasSve: $hasSve")
-        Log.d(logTag, "- hasI8mm: $hasI8mm")
-        Log.d(logTag, "- isAtLeastArmV82: $isAtLeastArmV82")
-        Log.d(logTag, "- isAtLeastArmV84: $isAtLeastArmV84")
+        Log.e(logTag, "CPU features: $cpuFeatures")
+        Log.e(logTag, "- hasFp16: $hasFp16")
+        Log.e(logTag, "- hasDotProd: $hasDotProd")
+        Log.e(logTag, "- hasSve: $hasSve")
+        Log.e(logTag, "- hasI8mm: $hasI8mm")
+        Log.e(logTag, "- isAtLeastArmV82: $isAtLeastArmV82")
+        Log.e(logTag, "- isAtLeastArmV84: $isAtLeastArmV84")
     }
 
     // Enforce only one instance of Llm.

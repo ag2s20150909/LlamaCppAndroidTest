@@ -33,7 +33,7 @@ endif ()
 if (${ANDROID_ABI} STREQUAL "arm64-v8a")
     set(GGML_CPU_AARCH64 ON)
     #https://gcc.gnu.org/onlinedocs/gcc-14.2.0/gcc/AArch64-Options.html
-    set(GGML_CPU_ARM_ARCH "armv8.2-a")
+    #set(GGML_CPU_ARM_ARCH "armv8.2-a+fp16+dotprod")
     set(GGML_USE_CPU_AARCH64 ON)
 endif ()
 

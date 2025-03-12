@@ -54,6 +54,37 @@ android {
             signingConfig = signingConfigs.release
         }
     }
+
+    flavorDimensions "version"
+
+    productFlavors{
+        base{
+            dimension "version"
+        }
+
+        v8_2_fp16{
+            dimension "version"
+
+        }
+
+        v8_2_fp16_dotprod{
+            dimension "version"
+           
+        }
+
+        v8_4_fp16_dotprod{
+            dimension "version"
+
+        }
+        v8_4_fp16_dotprod_i8mm{
+
+            dimension "version"
+
+        }
+    }
+
+
+
     compileOptions {
         sourceCompatibility =JavaVersion.VERSION_11
         targetCompatibility =JavaVersion.VERSION_11

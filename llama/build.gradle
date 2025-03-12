@@ -43,6 +43,59 @@ android {
             proguardFiles  getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+
+    flavorDimensions "version"
+    productFlavors{
+        base{
+            dimension "version"
+            externalNativeBuild{
+                cmake{
+                    arguments +="-DGGML_CPU_ARM_ARCH=armv8-a"
+                }
+
+            }
+        }
+
+        v8_2_fp16{
+            dimension "version"
+            externalNativeBuild{
+                cmake{
+                    arguments +="-DGGML_CPU_ARM_ARCH=armv8.2-a+fp16"
+                }
+            }
+        }
+
+        v8_2_fp16_dotprod{
+            dimension "version"
+            externalNativeBuild{
+                cmake{
+                    arguments +="-DGGML_CPU_ARM_ARCH=armv8.2-a+fp16+dotprod"
+                }
+            }
+        }
+
+        v8_4_fp16_dotprod{
+            dimension "version"
+            externalNativeBuild{
+                cmake{
+                    arguments +="-DGGML_CPU_ARM_ARCH=armv8.4-a+fp16+dotprod"
+                }
+            }
+        }
+        v8_4_fp16_dotprod_i8mm{
+
+            dimension "version"
+            externalNativeBuild{
+                cmake{
+                    arguments +="-DGGML_CPU_ARM_ARCH=armv8.4-a+fp16+dotprod+i8mm"
+
+                }
+            }
+        }
+    }
+
+
+
     compileOptions {
         sourceCompatibility =JavaVersion.VERSION_11
         targetCompatibility =JavaVersion.VERSION_11
@@ -60,6 +113,7 @@ android {
             version = '3.31.5'
         }
     }
+
 
 
 
