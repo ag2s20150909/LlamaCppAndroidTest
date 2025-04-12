@@ -36,7 +36,7 @@ LLMInference::load_model(const char *model_path, float min_p, float temperature,
     ctx_params.n_threads_batch = n_threads;
     ctx_params.flash_attn = true;
 
-    //ctx_params.n_ctx = 0;            // take context size from the model GGUF file
+    ctx_params.n_ctx = 1024;            // take context size from the model GGUF file
     ctx_params.type_k = GGML_TYPE_Q4_0;
     ctx_params.type_v = GGML_TYPE_Q4_0;
 
@@ -335,9 +335,9 @@ void LLMInference::clean_message() {
     prev_len = 0;
     common_batch_clear(batch);
     formatted.clear();
+    llama_kv_self_clear(ctx);
     //formatted = std::vector<char>(llama_n_ctx(ctx));
     messages.clear();
-    llama_kv_self_clear(ctx);
 }
 
 LLMInference::~LLMInference() {

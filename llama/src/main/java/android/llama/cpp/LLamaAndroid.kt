@@ -73,6 +73,7 @@ object LLamaAndroid {
         temperature: Float,
         storeChats: Boolean,
     ) = withContext(Dispatchers.IO) {
+        System.loadLibrary("llama-android")
         nativePtr = loadModel(modelPath, minP, temperature, storeChats)
     }
 
