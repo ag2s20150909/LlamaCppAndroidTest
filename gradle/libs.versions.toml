@@ -25,7 +25,7 @@ kotlinxSerialization = "1.8.1"
 material = "1.12.0"
 activity = "1.10.1"
 constraintlayout = "2.2.1"
-lifecycleRuntimeKtx = "2.8.7"
+lifecycleRuntimeKtx = "2.11.0"
 activityCompose = "1.10.1"
 composeBom = "2025.04.01"
 
